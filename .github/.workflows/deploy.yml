@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main  # deploy when main branch updates
+  workflow_dispatch:  # allows manual trigger from Actions tab
 
 jobs:
   deploy:
@@ -29,15 +30,27 @@ jobs:
           source: "myapp.tar"
           target: "~/app/"
 
-      - name: Deploy on EC2
+      - name: Deploy on EC2 (with Docker install)
         uses: appleboy/ssh-action@v0.1.10
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            # --- Install Docker if not already installed ---
+            if ! command -v docker &> /dev/null
+            then
+              echo "Installing Docker..."
+              sudo apt-get update -y
+              sudo apt-get install -y docker.io
+              sudo systemctl enable docker
+              sudo systemctl start docker
+            fi
+
+            # --- Deploy the container ---
+            mkdir -p ~/app
             cd ~/app
             docker load < myapp.tar
             docker stop myapp || true
             docker rm myapp || true
-            docker run -d -p 80:3000 --name myapp myapp
+            docker run -d -p 3000:3000 --name myapp myapp
