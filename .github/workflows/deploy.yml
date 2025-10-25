@@ -31,27 +31,32 @@ jobs:
           source: "myapp.tar"
           target: "~/app/"
 
-      - name: Deploy on EC2 (with Docker install)
-        uses: appleboy/ssh-action@v0.1.10
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            # --- Install Docker if not already installed ---
-            if ! command -v docker &> /dev/null
-            then
-              echo "Installing Docker..."
-              sudo apt-get update -y
-              sudo apt-get install -y docker.io
-              sudo systemctl enable docker
-              sudo systemctl start docker
-            fi
+      - name: SSH and deploy
+  uses: appleboy/ssh-action@v0.1.10
+  with:
+    host: ${{ secrets.SERVER_HOST }}
+    username: ${{ secrets.SERVER_USER }}
+    key: ${{ secrets.SERVER_PRIVATE_KEY }}
+    port: 22
+    script: |
+      # Add user to docker group (if not already added)
+      sudo usermod -aG docker $USER || true
+      newgrp docker || true
 
-            # --- Deploy the container ---
-            mkdir -p ~/app
-            cd ~/app
-            docker load < myapp.tar
-            docker stop myapp || true
-            docker rm myapp || true
-            docker run -d -p 3000:3000 --name myapp myapp
+      # Install Docker if not present
+      if ! command -v docker &> /dev/null; then
+        echo "Installing Docker..."
+        sudo apt-get update -y
+        sudo apt-get install -y docker.io
+        sudo systemctl enable docker
+        sudo systemctl start docker
+      fi
+
+      # Deploy container
+      mkdir -p ~/app
+      cd ~/app
+      sudo docker load < myapp.tar
+      sudo docker stop myapp || true
+      sudo docker rm myapp || true
+      sudo docker run -d -p 3000:3000 --name myapp myapp
+
